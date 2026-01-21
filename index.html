@@ -70,4 +70,98 @@
                 { text: 'Отсканируйте штрих‑код EAN‑13 товара' },
                 (result) => {
                     if (!result) {
-                        alert('Сканирование отменено или не удалось
+                        alert('Сканирование отменено или не удалось распознать штрих‑код');
+                        return false;
+                    }
+
+                    // Валидация формата EAN‑13 (13 цифр)
+                    const eanRegex = /^\d{13}$/;
+                    if (!eanRegex.test(result)) {
+                        const statusMessage = document.getElementById('status-message');
+                        statusMessage.style.display = 'block';
+                        statusMessage.textContent = 'Некорректный штрих‑код: ожидается 13 цифр (EAN‑13)';
+                        return false;
+                    }
+
+                    currentBarcode = result;
+                    const statusMessage = document.getElementById('status-message');
+
+                    // Скрываем сообщение об ошибке
+                    statusMessage.style.display = 'none';
+                    statusMessage.textContent = '';
+
+                    fetch(`${SCRIPT_URL}?barcode=${result}`)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`Ошибка HTTP: ${response.status}`);
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            if (data && data.name) {
+                                currentItem = data;
+                                document.getElementById('item-details').innerText = `Товар: ${data.name}`;
+                                document.getElementById('quantity').style.display = 'block';
+                                document.getElementById('upload-btn').style.display = 'block';
+                            } else {
+                                alert('Товар не найден в базе данных');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Ошибка при получении данных:', error);
+                            statusMessage.style.display = 'block';
+                            statusMessage.textContent = `Ошибка: ${error.message}`;
+                        });
+
+                    return true;
+                }
+            );
+        }
+
+        function upload() {
+            const qtyInput = document.getElementById('quantity');
+            const qty = qtyInput.value;
+            const statusMessage = document.getElementById('status-message');
+
+            // Скрываем предыдущее сообщение
+            statusMessage.style.display = 'none';
+            statusMessage.textContent = '';
+
+            if (!qty || parseInt(qty) <= 0) {
+                statusMessage.style.display = 'block';
+                statusMessage.textContent = 'Пожалуйста, введите корректное количество (больше 0)';
+                qtyInput.focus();
+                return;
+            }
+
+            const payload = {
+                userName: tg.initDataUnsafe.user?.first_name || 'Unknown',
+                barcode: currentBarcode,
+                itemName: currentItem.name,
+                quantity: parseInt(qty, 10)
+            };
+
+            fetch(SCRIPT_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => {
+                if (response.ok) {
+                    tg.showAlert('Данные успешно отправлены!');
+                    tg.close();
+                } else {
+                    throw new Error(`Ошибка сервера: ${response.status}`);
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка при отправке данных:', error);
+                statusMessage.style.display = 'block';
+                statusMessage.textContent = `Отправка не удалась: ${error.message}`;
+            });
+        }
+    </script>
+</body>
+</html>
