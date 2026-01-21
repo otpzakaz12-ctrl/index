@@ -1,62 +1,155 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <script src="https://telegram.org"></script>
+    <meta charset="UTF-8">
+    <title>Сканер штрих‑кодов</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-        input, button { padding: 10px; font-size: 16px; }
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        input, button {
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        button {
+            background-color: #0088cc;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #006699;
+        }
+        #item-details {
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <div id="user-info"></div>
-    <button onclick="scan()">1. ����������� �����-���</button>
+    <button onclick="scan()">1. Сканировать штрих‑код</button>
     <div id="item-details"></div>
-    <input type="number" id="quantity" placeholder="������� ����������" style="display:none">
-    <button id="upload-btn" onclick="upload()" style="display:none">2. ���������</button>
+    <input type="number" id="quantity" placeholder="Введите количество" min="1" style="display:none;">
+    <button id="upload-btn" onclick="upload()" style="display:none;">2. Загрузить</button>
+    <div id="status-message"></div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        const SCRIPT_URL = '���_URL_��_����_1';
+        // Корректный URL вашего Google Apps Script
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxiaPpNkx8A3OSEr10dfn-cFlN7TSsm0qABMysrhgDLEON8KA1QDnwqsOqt54_SqdT5YA/exec';
         let currentItem = null;
         let currentBarcode = null;
 
         tg.ready();
-        document.getElementById('user-info').innerText = `������������: ${tg.initDataUnsafe.user?.first_name}`;
+
+        // Отображение имени пользователя
+        const userInfo = document.getElementById('user-info');
+        if (tg.initDataUnsafe.user) {
+            userInfo.innerText = `Пользователь: ${tg.initDataUnsafe.user.first_name || 'Неизвестно'}`;
+        } else {
+            userInfo.innerText = 'Пользователь не определён';
+        }
 
         function scan() {
-            tg.showScanQrPopup({ text: "���������� �����-��� ������" }, (result) => {
-                currentBarcode = result;
-                fetch(`${SCRIPT_URL}?barcode=${result}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data) {
-                            currentItem = data;
-                            document.getElementById('item-details').innerText = `�����: ${data.name}`;
-                            document.getElementById('quantity').style.display = 'block';
-                            document.getElementById('upload-btn').style.display = 'block';
-                        } else {
-                            alert("����� �� ������");
-                        }
-                    });
-                return true; 
-            });
+            tg.showScanQrPopup(
+                { text: 'Отсканируйте штрих‑код товара' },
+                (result) => {
+                    if (!result) {
+                        alert('Сканирование отменено или не удалось распознать штрих‑код');
+                        return false;
+                    }
+
+                    currentBarcode = result;
+                    const statusMessage = document.getElementById('status-message');
+
+                    // Очистка предыдущего статуса
+                    statusMessage.textContent = '';
+                    statusMessage.className = '';
+
+                    fetch(`${SCRIPT_URL}?barcode=${result}`)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`Ошибка HTTP: ${response.status}`);
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            if (data && data.name) {
+                                currentItem = data;
+                                document.getElementById('item-details').innerText = `Товар: ${data.name}`;
+                                document.getElementById('quantity').style.display = 'block';
+                                document.getElementById('upload-btn').style.display = 'block';
+                            } else {
+                                alert('Товар не найден в базе данных');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Ошибка при получении данных:', error);
+                            statusMessage.textContent = `Ошибка: ${error.message}`;
+                            statusMessage.className = 'error';
+                        });
+
+                    return true;
+                }
+            );
         }
 
         function upload() {
-            const qty = document.getElementById('quantity').value;
+            const qtyInput = document.getElementById('quantity');
+            const qty = qtyInput.value;
+            const statusMessage = document.getElementById('status-message');
+
+            // Очистка предыдущего статуса
+            statusMessage.textContent = '';
+            statusMessage.className = '';
+
+            if (!qty || parseInt(qty) <= 0) {
+                statusMessage.textContent = 'Пожалуйста, введите корректное количество (больше 0)';
+                statusMessage.className = 'error';
+                qtyInput.focus();
+                return;
+            }
+
             const payload = {
-                userName: tg.initDataUnsafe.user?.first_name || "Unknown",
+                userName: tg.initDataUnsafe.user?.first_name || 'Unknown',
                 barcode: currentBarcode,
                 itemName: currentItem.name,
-                quantity: qty
+                quantity: parseInt(qty, 10)
             };
 
             fetch(SCRIPT_URL, {
                 method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify(payload)
-            }).then(() => {
-                tg.showAlert("���� ������ �� Google �����!");
-                tg.close();
+            })
+            .then(response => {
+                if (response.ok) {
+                    tg.showAlert('Данные успешно отправлены!');
+                    tg.close();
+                } else {
+                    throw new Error(`Ошибка сервера: ${response.status}`);
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка при отправке данных:', error);
+                statusMessage.textContent = `Отправка не удалась: ${error.message}`;
+                statusMessage.className = 'error';
             });
         }
     </script>
