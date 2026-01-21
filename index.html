@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>EAN13 Сканер 2026</title>
     <!-- Подключаем API Telegram и библиотеку сканера -->
-    <script src="https://telegram.org"></script>
-    <script src="https://unpkg.com"></script>
+    <script src="https://telegram.org/js/telegram-widget.js?2"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.10/dist/html5-qrcode.min.js"></script>
+
     <style>
         :root {
             --tg-theme-bg-color: #ffffff;
@@ -87,7 +88,7 @@
 <script>
 const tg = window.Telegram.WebApp;
 // Укажите ваш URL Google Apps Script
-const SCRIPT_URL = 'https://script.google.com';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxiaPpNkx8A3OSEr10dfn-cFlN7TSsm0qABMysrhgDLEON8KA1QDnwqsOqt54_SqdT5YA/exec';
 
 let html5QrCode;
 let currentBarcode = null;
@@ -205,3 +206,4 @@ async function upload() {
 </script>
 </body>
 </html>
+
