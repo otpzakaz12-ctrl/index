@@ -65,9 +65,25 @@
             userInfo.innerText = 'Пользователь не определён';
         }
 
-        function scan() {
-            tg.showScanQrPopup(
-                { text: 'Отсканируйте штрих‑код EAN‑13 товара' },
-                (result) => {
-                    if (!result) {
-                        alert('Сканирование отменено или не удалось
+       function scan() {
+    tg.showScanQrPopup({
+        text: 'Наведите камеру на штрих-код EAN-13' 
+    }, (result) => {
+        // Очищаем результат от пробелов
+        const code = result.trim();
+
+        // Простая проверка: EAN-13 состоит из 13 цифр
+        if (/^\d{13}$/.test(code)) {
+            processBarcode(code); // Ваша функция обработки
+            tg.closeScanQrPopup(); // Закрываем сканер при успехе
+            return true; 
+        } else {
+            // Если это не EAN-13 (например, QR или другой код), 
+            // можно вывести предупреждение, не закрывая сканер
+            alert("Это не EAN-13. Попробуйте еще раз.");
+            return false; // Сканер остается открытым для новой попытки
+        }
+    });
+}
+
+
