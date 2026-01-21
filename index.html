@@ -4,10 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>EAN13 Сканер 2026</title>
-    <!-- Подключаем API Telegram и библиотеку сканера -->
+    <!-- Подключаем Telegram Web App и сканер -->
     <script src="https://telegram.org/js/telegram-widget.js?2"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.10/dist/html5-qrcode.min.js"></script>
-
     <style>
         :root {
             --tg-theme-bg-color: #ffffff;
@@ -22,40 +21,39 @@
             color: var(--tg-theme-text-color);
             margin: 0; padding: 20px; text-align: center;
         }
-        /* Рамка сканера оптимизирована под узкий штрихкод */
         #reader { 
-            width: 100%; 
-            max-width: 500px; 
-            margin: 0 auto; 
-            border-radius: 15px; 
-            overflow: hidden; 
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            border-radius: 15px;
+            overflow: hidden;
             background: #000;
         }
-        .info-card { 
-            background: rgba(0,0,0,0.05); 
-            padding: 15px; 
-            border-radius: 12px; 
-            margin-top: 20px; 
+        .info-card {
+            background: rgba(0,0,0,0.05);
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
             border: 1px solid #ddd;
         }
-        input { 
-            width: 90%; 
-            padding: 15px; 
-            margin: 15px 0; 
-            border: 2px solid var(--tg-theme-button-color); 
-            border-radius: 10px; 
-            font-size: 18px; 
+        input {
+            width: 90%;
+            padding: 15px;
+            margin: 15px 0;
+            border: 2px solid var(--tg-theme-button-color);
+            border-radius: 10px;
+            font-size: 18px;
             outline: none;
         }
-        .btn { 
-            background: var(--tg-theme-button-color); 
+        .btn {
+            background: var(--tg-theme-button-color);
             color: var(--tg-theme-button-text-color);
-            border: none; 
-            padding: 16px 20px; 
-            border-radius: 12px; 
-            cursor: pointer; 
-            font-weight: bold; 
-            width: 100%; 
+            border: none;
+            padding: 16px 20px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
             font-size: 16px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
@@ -87,7 +85,6 @@
 
 <script>
 const tg = window.Telegram.WebApp;
-// Укажите ваш URL Google Apps Script
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxiaPpNkx8A3OSEr10dfn-cFlN7TSsm0qABMysrhgDLEON8KA1QDnwqsOqt54_SqdT5YA/exec';
 
 let html5QrCode;
@@ -109,13 +106,11 @@ async function startScanner() {
         html5QrCode = new Html5Qrcode("reader");
     }
     
-    const config = { 
-        fps: 20, 
-        // Прямоугольная область 300x150 идеальна для EAN-13
+    const config = {
+        fps: 20,
         qrbox: { width: 300, height: 150 },
-        // Ограничиваем только форматами товарных штрихкодов для скорости
-        formatsToSupport: [ 
-            Html5QrcodeSupportedFormats.EAN_13, 
+        formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
             Html5QrcodeSupportedFormats.EAN_8,
             Html5QrcodeSupportedFormats.CODE_128
         ]
@@ -165,7 +160,6 @@ async function showProductInfo(barcode) {
             details.innerHTML = `<span class="error">❌ Код ${barcode} не найден в базе</span>`;
         }
     } catch (e) {
-        // Если база не подключена, показываем результат сканирования для теста
         details.innerHTML = `✅ Код: <b>${barcode}</b><br><small>(Режим предпросмотра: подключите Google Scripts)</small>`;
         document.getElementById('input-area').style.display = 'block';
     }
@@ -187,23 +181,18 @@ async function upload() {
     };
 
     try {
-        await fetch(SCRIPT_URL, {
+        const response = await fetch(SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors', // Важно для работы с Google Scripts
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify(payload)
         });
 
-        tg.showAlert("Данные успешно сохранены!", () => {
-            // Перезагрузка страницы для нового сканирования
-            location.reload();
-        });
-    } catch (e) {
-        tg.showAlert("Ошибка при отправке. Проверьте интернет.");
-        btn.disabled = false;
-        btn.innerText = "ВЫГРУЗИТЬ В БАЗУ";
-    }
-}
-</script>
-</body>
-</html>
-
+        const result = await response.json();
+        if (response.ok && result.success) {
+            tg.showAlert("Данные успешно сохранены!", () => {
+                location.reload();
+            });
+        } else {
+            tg.show
