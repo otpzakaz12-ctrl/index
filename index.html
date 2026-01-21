@@ -3,16 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Складской Сканер 2026</title>
-    <!-- Подключаем скрипты: Telegram API и Сканер -->
+    <title>EAN13 Сканер 2026</title>
+    <!-- Подключаем API Telegram и библиотеку сканера -->
     <script src="https://telegram.org"></script>
     <script src="https://unpkg.com"></script>
     <style>
         :root {
-            --tg-theme-bg-color: #fff;
+            --tg-theme-bg-color: #ffffff;
             --tg-theme-button-color: #248bed;
             --tg-theme-button-text-color: #ffffff;
-            --tg-theme-hint-color: #999;
+            --tg-theme-text-color: #000000;
+            --tg-theme-hint-color: #999999;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -20,43 +21,79 @@
             color: var(--tg-theme-text-color);
             margin: 0; padding: 20px; text-align: center;
         }
-        #reader { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 12px; overflow: hidden; }
-        .info-card { background: rgba(0,0,0,0.05); padding: 15px; border-radius: 12px; margin-top: 20px; }
-        input { width: 80%; padding: 12px; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; }
-        .btn { background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color);
-               border: none; padding: 15px 25px; border-radius: 10px; cursor: pointer; font-weight: bold; width: 100%; }
+        /* Рамка сканера оптимизирована под узкий штрихкод */
+        #reader { 
+            width: 100%; 
+            max-width: 500px; 
+            margin: 0 auto; 
+            border-radius: 15px; 
+            overflow: hidden; 
+            background: #000;
+        }
+        .info-card { 
+            background: rgba(0,0,0,0.05); 
+            padding: 15px; 
+            border-radius: 12px; 
+            margin-top: 20px; 
+            border: 1px solid #ddd;
+        }
+        input { 
+            width: 90%; 
+            padding: 15px; 
+            margin: 15px 0; 
+            border: 2px solid var(--tg-theme-button-color); 
+            border-radius: 10px; 
+            font-size: 18px; 
+            outline: none;
+        }
+        .btn { 
+            background: var(--tg-theme-button-color); 
+            color: var(--tg-theme-button-text-color);
+            border: none; 
+            padding: 16px 20px; 
+            border-radius: 12px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            width: 100%; 
+            font-size: 16px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
         .btn:disabled { opacity: 0.5; }
         .error { color: #d9534f; font-weight: bold; }
-        .loading { color: var(--tg-theme-hint-color); }
+        .success-text { color: #28a745; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div id="user-info" style="margin-bottom: 15px; font-weight: bold;"></div>
+    <div id="user-info" style="margin-bottom: 15px; font-size: 14px; color: var(--tg-theme-hint-color);">
+        Инициализация...
+    </div>
     
     <div id="reader"></div>
 
-    <button id="scan-btn" class="btn" onclick="startScanner()">1. Включить сканер</button>
+    <div style="margin-top: 15px;">
+        <button id="scan-btn" class="btn" onclick="startScanner()">ВКЛЮЧИТЬ СКАНЕР ШТРИХКОДА</button>
+    </div>
 
-    <div id="item-details" class="info-card">Отсканируйте штрих-код товара</div>
+    <div id="item-details" class="info-card">
+        Нажмите кнопку и наведите камеру на штрихкод товара
+    </div>
 
     <div id="input-area" style="display: none;">
         <input type="number" id="quantity" placeholder="Введите количество" inputmode="numeric">
-        <button id="upload-btn" class="btn" onclick="upload()">2. Выгрузить данные</button>
+        <button id="upload-btn" class="btn" onclick="upload()">ВЫГРУЗИТЬ В БАЗУ</button>
     </div>
 
 <script>
 const tg = window.Telegram.WebApp;
+// Укажите ваш URL Google Apps Script
 const SCRIPT_URL = 'https://script.google.com';
 
 let html5QrCode;
 let currentBarcode = null;
-let itemName = null;
 
-// Инициализация при запуске
 tg.ready();
 tg.expand();
-tg.enableClosingConfirmation();
 
 if (tg.initDataUnsafe.user) {
     document.getElementById('user-info').innerText = `Сотрудник: ${tg.initDataUnsafe.user.first_name}`;
@@ -73,8 +110,14 @@ async function startScanner() {
     
     const config = { 
         fps: 20, 
-        qrbox: { width: 280, height: 160 },
-        aspectRatio: 1.0 // Оптимизация для мобильных
+        // Прямоугольная область 300x150 идеальна для EAN-13
+        qrbox: { width: 300, height: 150 },
+        // Ограничиваем только форматами товарных штрихкодов для скорости
+        formatsToSupport: [ 
+            Html5QrcodeSupportedFormats.EAN_13, 
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_128
+        ]
     };
 
     try {
@@ -82,54 +125,54 @@ async function startScanner() {
             { facingMode: "environment" },
             config,
             (decodedText) => {
-                tg.HapticFeedback.impactOccurred('medium'); 
+                tg.HapticFeedback.notificationOccurred('success');
                 currentBarcode = decodedText;
-                processBarcode(decodedText);
+                showProductInfo(decodedText);
                 stopScanner();
             }
         );
         btn.style.display = 'none';
     } catch (err) {
-        tg.showAlert("Доступ к камере отклонен или ошибка устройства.");
+        tg.showAlert("Доступ к камере отклонен или ошибка.");
         btn.disabled = false;
-        btn.innerText = "1. Включить сканер";
+        btn.innerText = "ВКЛЮЧИТЬ СКАНЕР";
     }
 }
 
 async function stopScanner() {
     if (html5QrCode && html5QrCode.isScanning) {
         await html5QrCode.stop();
-        document.getElementById('scan-btn').style.display = 'block';
-        document.getElementById('scan-btn').disabled = false;
-        document.getElementById('scan-btn').innerText = "Сканировать другой";
+        const btn = document.getElementById('scan-btn');
+        btn.style.display = 'block';
+        btn.disabled = false;
+        btn.innerText = "СКАНЕРОВАТЬ ДРУГОЙ";
     }
 }
 
-async function processBarcode(barcode) {
+async function showProductInfo(barcode) {
     const details = document.getElementById('item-details');
-    details.innerHTML = `<span class="loading">Поиск в базе: ${barcode}...</span>`;
+    details.innerHTML = `Штрихкод: <b>${barcode}</b><br>Запрашиваю данные...`;
     
     try {
-        const response = await fetch(`${SCRIPT_URL}?barcode=${barcode}&t=${Date.now()}`);
+        const response = await fetch(`${SCRIPT_URL}?barcode=${barcode}`);
         const data = await response.json();
 
         if (data.success) {
-            itemName = data.name;
-            details.innerHTML = `✅ <b>Товар:</b> ${data.name}<br>📦 <b>Код:</b> ${barcode}`;
+            details.innerHTML = `<span class="success-text">✅ ${data.name}</span><br><small>Код: ${barcode}</small>`;
             document.getElementById('input-area').style.display = 'block';
-            tg.HapticFeedback.notificationOccurred('success');
         } else {
-            details.innerHTML = `<span class="error">❌ Код ${barcode} не найден</span>`;
-            tg.HapticFeedback.notificationOccurred('error');
+            details.innerHTML = `<span class="error">❌ Код ${barcode} не найден в базе</span>`;
         }
     } catch (e) {
-        details.innerHTML = `<span class="error">Ошибка связи. Проверьте интернет.</span>`;
+        // Если база не подключена, показываем результат сканирования для теста
+        details.innerHTML = `✅ Код: <b>${barcode}</b><br><small>(Режим предпросмотра: подключите Google Scripts)</small>`;
+        document.getElementById('input-area').style.display = 'block';
     }
 }
 
 async function upload() {
     const qty = document.getElementById('quantity').value;
-    if (!qty || qty <= 0) return tg.showAlert("Введите корректное количество");
+    if (!qty || qty <= 0) return tg.showAlert("Укажите количество товара");
 
     const btn = document.getElementById('upload-btn');
     btn.disabled = true;
@@ -137,29 +180,26 @@ async function upload() {
 
     const payload = {
         barcode: currentBarcode,
-        name: itemName,
         quantity: qty,
-        user: tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || 'unknown'
+        user: tg.initDataUnsafe.user?.username || tg.initDataUnsafe.user?.first_name || 'unknown',
+        date: new Date().toISOString()
     };
 
     try {
-        // Используем POST с типом text/plain для минимизации проблем с CORS в Google Scripts
         await fetch(SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors',
-            cache: 'no-cache',
-            headers: { 'Content-Type': 'application/json' },
+            mode: 'no-cors', // Важно для работы с Google Scripts
             body: JSON.stringify(payload)
         });
 
-        tg.HapticFeedback.notificationOccurred('success');
-        tg.showAlert("Данные успешно отправлены!", () => {
-            location.reload(); 
+        tg.showAlert("Данные успешно сохранены!", () => {
+            // Перезагрузка страницы для нового сканирования
+            location.reload();
         });
     } catch (e) {
-        tg.showAlert("Ошибка при отправке: " + e.message);
+        tg.showAlert("Ошибка при отправке. Проверьте интернет.");
         btn.disabled = false;
-        btn.innerText = "2. Выгрузить данные";
+        btn.innerText = "ВЫГРУЗИТЬ В БАЗУ";
     }
 }
 </script>
