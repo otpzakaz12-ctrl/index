@@ -1,11 +1,14 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Сканер EAN‑13</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сканер EAN-13 (PRO)</title>
+    <!-- Подключаем необходимые библиотеки -->
+    <script src="https://telegram.org/tg/webapp.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.10/dist/html5-qrcode.min.js"></script>
     <style>
-        body {
+        body { 
             font-family: sans-serif;
             padding: 20px;
             display: flex;
@@ -13,77 +16,180 @@
             gap: 15px;
             max-width: 500px;
             margin: 0 auto;
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+        }
+        #reader {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid #0088cc;
+            background: #000;
         }
         input, button {
             padding: 12px;
             font-size: 16px;
-            border-radius: 6px;
-            border: 1px solid #ddd;
+            border-radius: 8px;
+            border: 1px solid #ccc;
         }
         button {
-            background-color: #0088cc;
-            color: white;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #006699;
+            background-color: var(--tg-theme-button-color, #0088cc);
+            color: var(--tg-theme-button-text-color, white);
+            border: none;
+            font-weight: bold;
         }
         #item-details {
-            padding: 10px;
-            background-color: #f9f9f9;
-            border-radius: 4px;
+            padding: 15px;
+            background-color: var(--tg-theme-secondary-bg-color, #f9f9f9);
+            border-radius: 8px;
+            border: 1px dashed #ccc;
         }
         .error {
-            color: red;
+            color: #cc0000;
             font-weight: bold;
-            margin-top: 5px;
+        }
+        .status {
+            font-size: 14px;
+            color: gray;
+        }
+        .loading {
+            color: #0088cc;
+            font-style: italic;
         }
     </style>
 </head>
 <body>
     <div id="user-info"></div>
-    <button onclick="scan()">1. Сканировать штрих‑код EAN‑13</button>
-    <div id="item-details"></div>
+    
+    <!-- Область сканера -->
+    <div id="reader"></div>
+    <button id="scan-btn" onclick="startScanner()">1. Включить сканер</button>
+    
+    <div id="item-details">Ожидание сканирования...</div>
+    
     <input type="number" id="quantity" placeholder="Введите количество" min="1" style="display:none;">
-    <button id="upload-btn" onclick="upload()" style="display:none;">2. Выгрузить</button>
-    <div id="status-message" class="error" style="display:none;"></div>
+    <button id="upload-btn" onclick="upload()" style="display:none;">2. Выгрузить данные</button>
+    
+    <div id="status-message"></div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        // Ваш URL Google Apps Script
+        // Корректный URL Google Apps Script
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxiaPpNkx8A3OSEr10dfn-cFlN7TSsm0qABMysrhgDLEON8KA1QDnwqsOqt54_SqdT5YA/exec';
-        let currentItem = null;
+        
+        let html5QrCode;
         let currentBarcode = null;
+        let itemName = null;
 
         tg.ready();
 
-        // Отображение имени пользователя
-        const userInfo = document.getElementById('user-info');
         if (tg.initDataUnsafe.user) {
-            userInfo.innerText = `Пользователь: ${tg.initDataUnsafe.user.first_name || 'Неизвестно'}`;
-        } else {
-            userInfo.innerText = 'Пользователь не определён';
+            document.getElementById('user-info').innerText = `Сотрудник: ${tg.initDataUnsafe.user.first_name}`;
         }
 
-       function scan() {
-    tg.showScanQrPopup({
-        text: 'Наведите камеру на штрих-код EAN-13' 
-    }, (result) => {
-        // Очищаем результат от пробелов
-        const code = result.trim();
+        async function startScanner() {
+            const btn = document.getElementById('scan-btn');
+            btn.disabled = true;
+            btn.innerText = "Камера запускается...";
 
-        // Простая проверка: EAN-13 состоит из 13 цифр
-        if (/^\d{13}$/.test(code)) {
-            processBarcode(code); // Ваша функция обработки
-            tg.closeScanQrPopup(); // Закрываем сканер при успехе
-            return true; 
-        } else {
-            // Если это не EAN-13 (например, QR или другой код), 
-            // можно вывести предупреждение, не закрывая сканер
-            alert("Это не EAN-13. Попробуйте еще раз.");
-            return false; // Сканер остается открытым для новой попытки
+            html5QrCode = new Html5Qrcode("reader");
+            
+            const config = { 
+                fps: 15, 
+                qrbox: { width: 280, height: 150 }, // Область для EAN-13
+                aspectRatio: 1.0
+            };
+
+            try {
+                await html5QrCode.start(
+                    { facingMode: { exact: "environment" } }, // Строгий режим
+                    config,
+                    (decodedText) => {
+                        // Успешно считан код
+                        currentBarcode = decodedText;
+                        processBarcode(decodedText);
+                        stopScanner();
+                    },
+                    (err) => { // Обработчик ошибок камеры
+                        console.error("Camera error:", err);
+                        alert("Не удалось получить доступ к камере. Проверьте разрешения.");
+                        stopScanner();
+                    }
+                );
+                btn.style.display = 'none';
+            } catch (err) {
+                alert("Ошибка камеры: " + err);
+                btn.disabled = false;
+                btn.innerText = "1. Попробовать снова";
+            }
         }
-    });
-}
 
+        async function stopScanner() {
+            if (html5QrCode) {
+                await html5QrCode.stop();
+                document.getElementById('scan-btn').style.display = 'block';
+                document.getElementById('scan-btn').disabled = false;
+                document.getElementById('scan-btn').innerText = "Сканировать еще раз";
+            }
+        }
 
+        async function processBarcode(barcode) {
+            const details = document.getElementById('item-details');
+            details.innerHTML = `<span class="loading">Ищем код: ${barcode}...</span>`;
+            
+            try {
+                const response = await fetch(`${SCRIPT_URL}?barcode=${barcode}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    itemName = data.name;
+                    details.innerHTML = `<b>Товар:</b> ${data.name}<br><b>Код:</b> ${barcode}`;
+                    document.getElementById('quantity').style.display = 'block';
+                    document.getElementById('upload-btn').style.display = 'block';
+                } else {
+                    details.innerHTML = `<span class="error">Код ${barcode} не найден</span>`;
+                    alert("Товар не найден в базе!");
+                }
+            } catch (e) {
+                details.innerHTML = `<span class="error">Ошибка связи с таблицей</span>`;
+                alert("Ошибка связи с таблицей");
+            }
+        }
+
+        async function upload() {
+            const qty = document.getElementById('quantity').value;
+            if (!qty) return alert("Введите количество");
+
+            const payload = {
+                barcode: currentBarcode,
+                name: itemName,
+                quantity: qty,
+                user: tg.initDataUnsafe.user?.first_name || 'bot'
+            };
+
+            const status = document.getElementById('status-message');
+            status.innerHTML = '<span class="loading">Отправляем данные...</span>';
+
+            try {
+                const response = await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    alert("Данные успешно отправлены!");
+                    location.reload();
+                } else {
+                    throw new Error('HTTP error ' + response.status);
+                }
+            } catch (e) {
+                status.innerHTML = '<span class="error">Ошибка при отправке</span>';
+                alert("Ошибка при отправке: " + e.message);
+            }
+        }
+    </script>
+</body>
+</html>
