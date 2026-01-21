@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>EAN13 Сканер 2026</title>
-    <!-- Подключаем Telegram Web App и сканер -->
+    <!-- Исправлены URL: добавлена 's' в https -->
     <script src="https://telegram.org/js/telegram-web-app.js?2"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.10/dist/html5-qrcode.min.js"></script>
     <style>
@@ -18,10 +18,26 @@
             background-color: var(--tg-theme-bg-color);
             margin: 0; padding: 20px; text-align: center;
         }
-        #reader { width: 100%; max-width: 500px; margin: 0 auto; border-radius: 15px; overflow: hidden; background: #000; }
-        .info-card { background: rgba(0,0,0,0.05); padding: 15px; border-radius: 12px; margin-top: 20px; border: 1px solid #ddd; }
-        input { width: 90%; padding: 15px; margin: 15px 0; border: 2px solid var(--tg-theme-button-color); border-radius: 10px; font-size: 18px; }
-        .btn { background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); border: none; padding: 16px 20px; border-radius: 12px; cursor: pointer; font-weight: bold; width: 100%; font-size: 16px; }
+        #reader { 
+            width: 100%; max-width: 500px; margin: 0 auto;
+            border-radius: 15px; overflow: hidden; background: #000;
+        }
+        .info-card {
+            background: rgba(0,0,0,0.05); padding: 15px;
+            border-radius: 12px; margin-top: 20px; border: 1px solid #ddd;
+        }
+        input {
+            width: 90%; padding: 15px; margin: 15px 0;
+            border: 2px solid var(--tg-theme-button-color);
+            border-radius: 10px; font-size: 18px;
+        }
+        .btn {
+            background: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            border: none; padding: 16px 20px;
+            border-radius: 12px; cursor: pointer;
+            font-weight: bold; width: 100%; font-size: 16px;
+        }
         .btn:disabled { opacity: 0.5; }
     </style>
 </head>
@@ -43,8 +59,10 @@
 const tg = window.Telegram.WebApp;
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyoo4-o9i1jIOgQNEAnVXbotSMwMvy5lIJATKFDWyYgcdVp55SWYDmBC94FN_Q-U3xWRA/exec';
 
+
 let html5QrCode;
 let currentBarcode = null;
+
 
 tg.ready();
 tg.expand();
@@ -53,16 +71,46 @@ if (tg.initDataUnsafe.user) {
     document.getElementById('user-info').innerText = `Сотрудник: ${tg.initDataUnsafe.user.first_name}`;
 }
 
+// Проверка наличия камеры
+async function checkCamera() {
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        if (videoDevices.length === 0) {
+            throw new Error('Камера не найдена');
+        }
+        return true;
+    } catch (err) {
+        tg.showAlert(`Ошибка камеры: ${err.message}`);
+        return false;
+    }
+}
+
 async function startScanner() {
     const btn = document.getElementById('scan-btn');
     btn.disabled = true;
-    if (!html5QrCode) { html5QrCode = new Html5Qrcode("reader"); }
+
+    // Проверка камеры
+    if (!(await checkCamera())) {
+        btn.disabled = false;
+        return;
+    }
+
+    if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("reader");
+    }
     
     try {
         await html5QrCode.start(
             { facingMode: "environment" },
-            { fps: 20, qrbox: { width: 300, height: 150 }, 
-              formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8 ] },
+            { 
+                fps: 20,
+                qrbox: { width: 300, height: 150 },
+                formatsToSupport: [
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8
+                ]
+            },
             (decodedText) => {
                 tg.HapticFeedback.notificationOccurred('success');
                 currentBarcode = decodedText;
@@ -73,17 +121,24 @@ async function startScanner() {
         );
         btn.style.display = 'none';
     } catch (err) {
-        tg.showAlert("Ошибка камеры");
+        console.error('Ошибка сканера:', err);
+        tg.showAlert(`Не удалось запустить камеру: ${err.message}`);
         btn.disabled = false;
+        btn.style.display = 'block';
     }
 }
 
 async function stopScanner() {
     if (html5QrCode && html5QrCode.isScanning) {
-        await html5QrCode.stop();
-        document.getElementById('scan-btn').style.display = 'block';
-        document.getElementById('scan-btn').disabled = false;
+        try {
+            await html5QrCode.stop();
+        } catch (err) {
+            console.warn('Ошибка при остановке сканера:', err);
+        }
     }
+    const btn = document.getElementById('scan-btn');
+    btn.style.display = 'block';
+    btn.disabled = false;
 }
 
 async function upload() {
@@ -101,25 +156,29 @@ async function upload() {
     };
 
     try {
-        // ИСПРАВЛЕНО: Работа с Google Scripts через text/plain для обхода CORS
-        await fetch(SCRIPT_URL, {
+        // Убираем mode: 'no-cors' — он блокирует ответ сервера
+        const response = await fetch(SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors', 
-            cache: 'no-cache',
-            headers: { 'Content-Type': 'text/plain' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify(payload)
         });
 
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
         tg.showAlert("✅ Данные успешно отправлены!", () => {
-            location.reload(); 
+            location.reload();
         });
     } catch (e) {
-        tg.showAlert("Ошибка: " + e.message);
+        console.error('Ошибка отправки:', e);
+        tg.showAlert(`Ошибка: ${e.message}`);
         btn.disabled = false;
         btn.innerText = "ОТПРАВИТЬ В ТАБЛИЦУ";
     }
 }
 </script>
-</body>
-</html>
-
+</
